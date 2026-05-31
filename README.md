@@ -34,6 +34,8 @@
 
 ---
 
+> **Fork note:** This repository is maintained as a compatibility-focused fork for agent workflows. See [FORK.md](FORK.md) for why the fork exists and how its behavior differs from upstream.
+
 rtk filters and compresses command outputs before they reach your LLM context. Single Rust binary, 100+ supported commands, <10ms overhead.
 
 ## Token Savings (30-min Claude Code Session)
