@@ -7,8 +7,64 @@
 
 use anyhow::{Context, Result};
 use regex::Regex;
+use std::error::Error;
+use std::ffi::OsStr;
+use std::fmt;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
+
+#[derive(Debug)]
+pub struct CommandNotFoundError {
+    command: String,
+}
+
+impl CommandNotFoundError {
+    pub fn from_program(program: &OsStr) -> Self {
+        Self {
+            command: program.to_string_lossy().into_owned(),
+        }
+    }
+
+    pub fn command(&self) -> &str {
+        &self.command
+    }
+}
+
+impl fmt::Display for CommandNotFoundError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "command not found: {}", self.command)
+    }
+}
+
+impl Error for CommandNotFoundError {}
+
+pub fn command_not_found_from_error(error: &anyhow::Error) -> Option<&str> {
+    error
+        .chain()
+        .find_map(|cause| cause.downcast_ref::<CommandNotFoundError>())
+        .map(CommandNotFoundError::command)
+}
+
+pub fn print_command_not_found(command: &str) -> i32 {
+    #[cfg(unix)]
+    {
+        let helper = std::path::Path::new("/usr/lib/command-not-found");
+        if helper.exists() {
+            if let Ok(status) = Command::new(helper)
+                .arg(command)
+                .stdin(Stdio::null())
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .status()
+            {
+                return status.code().unwrap_or(127);
+            }
+        }
+    }
+
+    eprintln!("{}: command not found", command);
+    127
+}
 
 /// Truncates a string to `max_len` characters, appending `...` if needed.
 ///
@@ -342,8 +398,7 @@ pub fn resolved_command(name: &str) -> Command {
         Err(e) => {
             // On Windows, resolution failure likely means a .CMD/.BAT wrapper
             // wasn't found — always warn so users have a signal.
-            // On Unix, this is less common; only log in debug builds.
-            if cfg!(any(target_os = "windows", debug_assertions)) {
+            if cfg!(target_os = "windows") {
                 eprintln!(
                     "rtk: Failed to resolve '{}' via PATH, falling back to direct exec: {}",
                     name, e

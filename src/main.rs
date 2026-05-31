@@ -1240,8 +1240,12 @@ fn run_fallback(parse_error: clap::Error) -> Result<i32> {
             Err(e) => {
                 // Command not found — same behaviour as no-TOML path
                 core::tracking::record_parse_failure_silent(&raw_command, &error_message, false);
-                eprintln!("[rtk: {}]", e);
-                Ok(127)
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    Ok(core::utils::print_command_not_found(&args[0]))
+                } else {
+                    eprintln!("[rtk: {}]", e);
+                    Ok(127)
+                }
             }
         }
     } else {
@@ -1264,8 +1268,12 @@ fn run_fallback(parse_error: clap::Error) -> Result<i32> {
             Err(e) => {
                 core::tracking::record_parse_failure_silent(&raw_command, &error_message, false);
                 // Command not found or other OS error — single message, no duplicate Clap error
-                eprintln!("[rtk: {}]", e);
-                Ok(127)
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    Ok(core::utils::print_command_not_found(&args[0]))
+                } else {
+                    eprintln!("[rtk: {}]", e);
+                    Ok(127)
+                }
             }
         }
     }
@@ -1370,8 +1378,12 @@ fn main() {
     let code = match run_cli() {
         Ok(code) => code,
         Err(e) => {
-            eprintln!("rtk: {:#}", e);
-            1
+            if let Some(command) = core::utils::command_not_found_from_error(&e) {
+                core::utils::print_command_not_found(command)
+            } else {
+                eprintln!("rtk: {:#}", e);
+                1
+            }
         }
     };
     std::process::exit(code);

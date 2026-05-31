@@ -3,6 +3,8 @@ use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
 
+use crate::core::utils::CommandNotFoundError;
+
 #[cfg(test)]
 use regex::Regex;
 
@@ -260,7 +262,7 @@ pub fn run_streaming(
         };
         cmd.stdout(Stdio::inherit());
         cmd.stderr(Stdio::inherit());
-        let status = cmd.status().context("Failed to spawn process")?;
+        let status = cmd.status().map_err(|e| map_spawn_error(cmd, e))?;
         return Ok(StreamResult {
             exit_code: status_to_exit_code(status),
             raw: String::new(),
@@ -290,7 +292,7 @@ pub fn run_streaming(
 
     let is_streaming = matches!(stdout_mode, FilterMode::Streaming(_));
 
-    let mut child = ChildGuard(cmd.spawn().context("Failed to spawn process")?);
+    let mut child = ChildGuard(cmd.spawn().map_err(|e| map_spawn_error(cmd, e))?);
 
     let stdin_thread: Option<std::thread::JoinHandle<()>> = match stdin_mode {
         StdinMode::Filter(mut filter) => {
@@ -533,12 +535,20 @@ impl CaptureResult {
 
 pub fn exec_capture(cmd: &mut Command) -> Result<CaptureResult> {
     cmd.stdin(Stdio::null());
-    let output = cmd.output().context("Failed to execute command")?;
+    let output = cmd.output().map_err(|e| map_spawn_error(cmd, e))?;
     Ok(CaptureResult {
         stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
         stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
         exit_code: status_to_exit_code(output.status),
     })
+}
+
+fn map_spawn_error(cmd: &Command, error: io::Error) -> anyhow::Error {
+    if error.kind() == io::ErrorKind::NotFound {
+        CommandNotFoundError::from_program(cmd.get_program()).into()
+    } else {
+        error.into()
+    }
 }
 
 #[cfg(test)]

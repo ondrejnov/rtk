@@ -2,7 +2,7 @@
 
 use crate::core::runner;
 use crate::core::truncate::CAP_WARNINGS;
-use crate::core::utils::{resolved_command, tool_exists, truncate};
+use crate::core::utils::{print_command_not_found, resolved_command, tool_exists, truncate};
 use anyhow::Result;
 
 const MAX_XFAIL: usize = CAP_WARNINGS;
@@ -17,13 +17,11 @@ enum ParseState {
 }
 
 pub fn run(args: &[String], verbose: u8) -> Result<i32> {
-    let mut cmd = if tool_exists("pytest") {
-        resolved_command("pytest")
-    } else {
-        let mut c = resolved_command("python");
-        c.arg("-m").arg("pytest");
-        c
-    };
+    if !tool_exists("pytest") {
+        return Ok(print_command_not_found("pytest"));
+    }
+
+    let mut cmd = resolved_command("pytest");
 
     let has_tb_flag = args.iter().any(|a| a.starts_with("--tb"));
     let has_quiet_flag = args.iter().any(|a| a == "-q" || a == "--quiet");
